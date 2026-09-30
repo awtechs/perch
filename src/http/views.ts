@@ -1,0 +1,6 @@
+export const escape = (value:string):string => value.replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character] ?? character));
+export function page(body:string):string {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Perch</title><style>
+  :root{color-scheme:dark}*{box-sizing:border-box}body{max-width:960px;margin:36px auto;padding:0 20px;font:16px/1.5 system-ui;background:#111315;color:#e6e9eb}a{color:#c3d9e6}nav{display:flex;gap:24px;align-items:center;flex-wrap:wrap;margin-bottom:30px}article{border:1px solid #34383c;border-radius:12px;padding:20px;margin:20px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#080a0b;padding:16px;font-size:14px}button,input{font:inherit;padding:10px;margin:6px 6px 6px 0;max-width:100%}button{cursor:pointer;border:1px solid #48525a;border-radius:6px;background:#252d32;color:inherit}small,.muted{color:#a7b1b8}h1{font-size:26px}label{display:block}code{overflow-wrap:anywhere}details{margin:12px 0}input{background:#080a0b;color:inherit;border:1px solid #48525a;border-radius:6px}
+  </style></head><body><nav><strong>Perch</strong><a href="/approvals">Approvals</a><a href="/clients">Clients</a></nav>${body}</body></html>`;
+}

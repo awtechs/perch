@@ -1,0 +1,9 @@
+[Unit]
+Description=Build and deploy trusted Perch tags
+After=network-online.target
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/perch-updater.env
+ExecStart=/usr/local/libexec/perch-update
+UMask=0077
+TimeoutStartSec=900

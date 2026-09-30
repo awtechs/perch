@@ -4,3 +4,5 @@ data/
 .env
 *.sqlite*
 __pycache__/
+*.tar.gz
+COMMIT

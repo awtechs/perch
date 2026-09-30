@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   test:
-    runs-on: [self-hosted, linux, x64, perch]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -17,6 +17,9 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
       - run: npm run build
       - run: npm test
-      - run: python3 -m py_compile deploy/perch-deploy.py
+      - run: npm run test:deploy
+      - run: python3 -m py_compile deploy/perch-deploy.py deploy/perch-update.py
+      - run: bash -n deploy/perch-build.sh

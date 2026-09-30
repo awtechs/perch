@@ -6,7 +6,6 @@ import json
 import os
 import pathlib
 import re
-import shutil
 import subprocess
 import sys
 import tarfile
@@ -14,7 +13,12 @@ import tempfile
 import time
 import urllib.request
 
-ROOT = pathlib.Path('/opt/perch')
+CONFIG_PATH = pathlib.Path(os.environ.get('PERCH_DEPLOY_CONFIG', '/etc/perch-deploy.json'))
+CONFIG = json.loads(CONFIG_PATH.read_text()) if CONFIG_PATH.exists() else {}
+ROOT = pathlib.Path(CONFIG.get('root', '/opt/perch'))
+DATA_DIR = pathlib.Path(CONFIG.get('data_dir', '/var/lib/perch'))
+SERVICE = CONFIG.get('service', 'perch')
+HEALTH_URL = CONFIG.get('health_url', 'http://127.0.0.1:8787/health')
 
 def run(*args: str) -> None:
     subprocess.run(args, check=True, stdin=subprocess.DEVNULL)
@@ -27,7 +31,7 @@ def activate(target: pathlib.Path) -> None:
 
 def healthy(version: str, commit: str | None = None) -> bool:
     try:
-        with urllib.request.urlopen('http://127.0.0.1:8787/health', timeout=2) as response:
+        with urllib.request.urlopen(HEALTH_URL, timeout=2) as response:
             body = json.load(response)
         return body.get('status') == 'ok' and body.get('version') == version and (commit is None or body.get('commit') == commit)
     except (OSError, ValueError):
@@ -46,11 +50,11 @@ def main() -> None:
     if not match:
         raise RuntimeError('Only deploy <version> <sha256> <commit> is allowed')
     tag, digest, commit = match.groups()
-    ROOT.mkdir(mode=0o700, exist_ok=True)
+    ROOT.mkdir(mode=0o755, exist_ok=True)
     with (ROOT / '.deploy.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         releases = ROOT / 'releases'
-        releases.mkdir(mode=0o700, exist_ok=True)
+        releases.mkdir(mode=0o755, exist_ok=True)
         release = releases / f'{tag}-{commit[:12]}'
         if release.exists():
             raise RuntimeError('This release already exists; use a new version tag')
@@ -68,14 +72,18 @@ def main() -> None:
             if checksum.hexdigest() != digest:
                 raise RuntimeError('Archive checksum mismatch')
             staged = pathlib.Path(scratch) / 'staged'
-            staged.mkdir(mode=0o700)
+            staged.mkdir(mode=0o755)
             with tarfile.open(archive, 'r:gz') as package:
-                if sum(member.size for member in package.getmembers()) > 1024 * 1024 * 1024:
-                    raise RuntimeError('Extracted release exceeds 1 GiB')
-                for member in package.getmembers():
+                members = []
+                total_size = 0
+                for member in package:
+                    members.append(member)
+                    total_size += member.size
+                    if len(members) > 100000 or total_size > 1024 * 1024 * 1024:
+                        raise RuntimeError('Extracted release exceeds limits')
                     if member.isdev() or member.isfifo() or member.mode & 0o6000:
                         raise RuntimeError('Archive contains a forbidden file type or mode')
-                package.extractall(staged, filter='data')
+                package.extractall(staged, members=members, filter='data')
             metadata = json.loads((staged / 'package.json').read_text())
             if metadata.get('name') != 'perch' or metadata.get('version') != tag[1:]:
                 raise RuntimeError('Package does not match release tag')
@@ -87,25 +95,31 @@ def main() -> None:
             previous = current.resolve(strict=True) if current.exists() else None
             previous_version = json.loads((previous / 'package.json').read_text())['version'] if previous else None
             # SQLite must not change while the backup API reads its state.
-            run('systemctl', 'stop', 'perch')
+            run('systemctl', 'stop', SERVICE)
             try:
                 import sqlite3
-                data = pathlib.Path('/var/lib/awtechs-vps-mcp/state.sqlite')
+                data = DATA_DIR / 'state.sqlite'
                 if data.exists():
                     backups = ROOT / 'backups'
                     backups.mkdir(mode=0o700, exist_ok=True)
-                    with sqlite3.connect(data) as source, sqlite3.connect(backups / f'{tag}-{commit[:12]}.sqlite') as backup:
+                    snapshot = backups / f'{tag}-{commit[:12]}'
+                    snapshot.mkdir(mode=0o700)
+                    with sqlite3.connect(data) as source, sqlite3.connect(snapshot / 'state.sqlite') as backup:
                         source.backup(backup)
+                    key = DATA_DIR / 'oauth.key'
+                    if key.exists():
+                        (snapshot / 'oauth.key').write_bytes(key.read_bytes())
+                        (snapshot / 'oauth.key').chmod(0o600)
                 staged.replace(release)
                 activate(release)
-                run('systemctl', 'start', 'perch')
+                run('systemctl', 'start', SERVICE)
                 if not wait_health(tag[1:], commit):
                     raise RuntimeError('New release failed its health check')
             except BaseException:
-                run('systemctl', 'stop', 'perch')
+                run('systemctl', 'stop', SERVICE)
                 if previous:
                     activate(previous)
-                    run('systemctl', 'start', 'perch')
+                    run('systemctl', 'start', SERVICE)
                     if not wait_health(previous_version):
                         raise RuntimeError('Deployment failed and rollback is unhealthy')
                     print('Previous release restored', flush=True)

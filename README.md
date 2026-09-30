@@ -1,45 +1,67 @@
 # Perch
 
-An initial approval-gated arbitrary Bash command MCP for a Linux VPS. RDC remains installed as the fallback.
+Self-hosted VPS administration through MCP, with explicit owner approval for shell commands.
 
-## Approval model
+Perch lets an AI client request an arbitrary Bash command, shows the owner exactly what will run, and records the decision and result. It is designed for Linux servers. Desktop control is outside the current scope.
 
-- `request_command` records the exact command, canonical absolute working directory and authenticated client identity. It does not execute a pending request.
-- The owner signs into `/approvals` with a separate password and chooses **Approve now**, **Always approve this command for this client**, or **Deny**.
-- A one-time approval permits one execution of that stored request, through `execute_approved_command`. The agent cannot substitute another command or directory.
-- A saved approval matches the exact command and canonical directory for the same client. Future matches start automatically. Saved approvals can be revoked in the owner interface.
-- Pending and unused one-time approvals expire after ten minutes. Requests, saved approvals and audit records survive restarts in SQLite. Owner sessions expire after one hour and are lost on restart.
-- `get_command_result` returns bounded output and status only for the authenticated client's own requests.
-- Bash receives a fixed environment without the MCP's client token or owner password. Execution is capped at five minutes, output at 256 KiB and concurrency at four commands. Commands are non-interactive; process groups are terminated at completion or timeout. This version does not support keeping background jobs alive.
+**Status: early alpha.** Keep an independent recovery path such as SSH or RDC while evaluating Perch. The bootstrap release is not a hardened sandbox for untrusted root commands.
 
-## Running
+## How approval works
 
-Requires Node.js 24 on Linux. Run `npm ci`, `npm run build`, then `npm test`.
+1. An authenticated client calls `request_command` with a command, an absolute working directory and a timeout. Include an idempotency key to make retries safe.
+2. The owner opens `/approvals` and chooses **Approve now**, **Always approve this command for this client**, or **Deny**.
+3. The client calls `execute_approved_command` after approval, then polls `get_command_result` for live output and completion.
 
-Set `ADMIN_PASSWORD` (at least 24 characters), `CLIENT_TOKEN` (at least 32 characters), `CLIENT_ID`, `CLIENT_NAME`, `DATA_DIR`, `HOST`, `PORT` and `PUBLIC_URL`, then run `npm start`. Defaults bind to loopback port 8787. Keep credentials out of source control and tool-call output. The supplied systemd unit reads `/etc/perch.env` and uses `/opt/perch/current`.
+A one-time approval is consumed once. A saved rule matches the exact command bytes, canonical working directory, authenticated client ID and an approved maximum timeout. It is not a wildcard or command-prefix rule. Saved rules are revocable; revocation also blocks unstarted requests relying on that rule. Files and scripts invoked by an approved command can change, so approve repeated script execution deliberately.
 
-Connect an MCP client to `/mcp` using Streamable HTTP and `Authorization: Bearer <CLIENT_TOKEN>`. The initial client is provisioned from environment variables; displayed MCP client names do not establish identity. Each additional client must receive a separately provisioned token and ID. Client management and OAuth onboarding are not implemented yet.
+A client name is only a display label. Identity comes from the registered OAuth client or separately provisioned Bearer credential. Token refresh preserves that identity. Disabling a client revokes its tokens, blocks pending commands and interrupts its running commands.
 
-## Deployment boundary
+## Local development
 
-This is a bootstrap release, not a stable RDC replacement. Keep it on loopback until TLS and client onboarding are configured and checked. The owner password must be used only in the owner browser, never given to the agent. Reverse proxy deployment must preserve Origin checks and protect the owner login. It is not yet directly usable as a ChatGPT OAuth connector.
+Requirements: Linux, Node.js 24 and npm. Deployment tooling additionally requires systemd and Python 3.12 or later.
 
-The runner executes with the service account's OS permissions. On the initial VPS installation that account is root. An approved root command can inspect or modify the approval service, its files and credentials. This approval workflow is not an OS security boundary against malicious privileged commands. Persistent approval is permission to re-run a command, not a guarantee that script contents, files or environment state remain unchanged. Review commands invoking mutable scripts carefully.
+```bash
+npm ci
+npm run typecheck
+npm run build
+npm test
+npm run test:deploy
+```
 
-## Operations
+Create `.env` from [.env.example](.env.example), replace placeholder credentials, and run:
 
-Back up the state directory using SQLite's backup API or stop the service before copying the database and WAL files. Restarting the service marks unfinished jobs interrupted. The systemd control group terminates remaining command processes when the service stops. Revoking a saved approval blocks future matching requests; it does not undo completed commands or revoke already granted one-time requests.
+```bash
+node --env-file=.env dist/server.js
+```
 
-Before retiring RDC: configure TLS and authenticated client onboarding, exercise real maintenance workflows with owner approvals, test restart/reconnect and recovery, test revocation and backup restoration, and run alongside RDC for an agreed period.
+Open `http://127.0.0.1:8787/login`. Keep the owner password out of agent context. An optional bootstrap token supports local MCP testing. Production clients can connect through OAuth or owner-created token clients.
 
-## Tagged updates
+## Connect an MCP client
 
-Pull requests and pushes to `main` run checks without updating production. Push a semantic version tag such as `v0.1.0` on a commit already merged into `main` to publish and deploy that version. Do not move or reuse release tags.
+The endpoint is `<PUBLIC_URL>/mcp`, using Streamable HTTP. OAuth discovery, dynamic client registration, owner consent and PKCE are supported. Access tokens are short-lived; refresh tokens rotate and reused refresh tokens revoke their token family. The requested resource must match this Perch instance.
 
-Checks and releases run on the dedicated non-root `perch` self-hosted runner, with filesystem protections around production credentials and approval data. The release workflow builds and tests on Node.js 24, packages production dependencies, and publishes a GitHub release with the archive and its SHA-256 checksum. A dedicated SSH key streams that same archive to `deploy/perch-deploy.py` on the VPS. The forced-command key cannot open a general SSH shell, forward ports or allocate a terminal. Deployment requires repository secrets `PERCH_DEPLOY_HOST`, `PERCH_DEPLOY_PORT`, `PERCH_DEPLOY_KEY` and `PERCH_DEPLOY_KNOWN_HOSTS`.
+For token clients, create a credential from the owner-only `/clients` page and send it as `Authorization: Bearer <token>`. Credentials are shown once. Client credentials cannot approve commands or create other clients through MCP tools.
 
-The receiver validates tag, checksum, commit and archive paths; takes an SQLite backup with the service stopped; installs a separate release directory; atomically switches `/opt/perch/current`; and checks the running version. A failed health check restores the previous code and restarts it. Deployments are serialised on GitHub and with a VPS file lock.
+See [authentication](docs/authentication.md) for client setup and [operations](docs/operations.md) for installation and recovery.
 
-Approval data remains at the existing `/var/lib/awtechs-vps-mcp` location and credentials in `/etc/perch.env`, outside release directories. Backups are retained in `/opt/perch/backups`. Database schema changes must remain compatible with the preceding release: code rollback does not automatically overwrite the current database. This prevents rollback from discarding new approvals or audit records. Background commands are stopped during updates; avoid tagging a release during active maintenance.
+## Deployment and updates
 
-The deployment receiver and systemd unit are bootstrap infrastructure managed separately from application archives. To update either, explicitly install the reviewed version on the VPS. If deployment fails after the GitHub release was created, inspect the workflow logs; do not reuse the tag. Fix the issue and publish a new version.
+Pull requests run on GitHub-hosted runners. **Do not attach a production VPS runner to a public Perch repository.** Public contribution workflows must have no production credentials or network access to the server.
+
+The optional VPS updater polls stable version tags such as `v0.2.0`. It accepts only tagged commits already on `main`, downloads that exact source, and builds and tests it as a separate unprivileged user inside a systemd sandbox. It passes no GitHub credentials, owner password or client tokens to the build. Failed builds do not reach the running service. A successful build is checksum-verified, installed as a separate release, and activated only if its health endpoint reports the expected version and commit. Failed activation restores the previous code.
+
+Public GitHub Actions can separately publish downloadable release assets. Production updates do not depend on GitHub-hosted runner billing, and do not execute public pull-request workflows on the VPS.
+
+The updater, release receiver and service units are reviewed bootstrap infrastructure, installed separately from application releases. See [deployment](docs/deployment.md) for setup, limitations and rollback.
+
+## Security boundary
+
+Perch requires approval before executing commands; it does **not** make an approved privileged command harmless. Commands execute as the configured service account. A root command can inspect or change the server, Perch itself, its approval database and credentials. Running the owner approval authority on the same root-accessible machine cannot prevent this.
+
+Use a dedicated unprivileged account where possible. Grant root execution only when needed for administration and retain a recovery channel. This release is for a single owner managing a trusted VPS, not a multi-tenant execution platform.
+
+See the [threat model](docs/threat-model.md) and [security policy](SECURITY.md).
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md), open a focused issue or pull request, and include evidence for changed behaviour. Security issues should be reported privately. Perch is licensed under [MIT](LICENSE).
