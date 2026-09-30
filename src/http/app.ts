@@ -14,7 +14,7 @@ export function application(store:Store,runner:Runner,oauth:OAuthProvider,config
   const app=express();app.disable('x-powered-by');
   if(config.TRUST_PROXY)app.set('trust proxy',config.TRUST_PROXY.split(',').map(address=>address.trim()));
   app.use((req,res,next)=>{
-    res.set({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"});
+    res.set({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'same-origin','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"});
     if(config.PUBLIC_URL.startsWith('https:'))res.set('Strict-Transport-Security','max-age=31536000');
     // Only known origins and hosts reach owner actions, OAuth or MCP; proxy trust is explicit.
     const origin=new URL(config.PUBLIC_URL);
