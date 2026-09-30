@@ -9,7 +9,11 @@ from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('perch_receiver', pathlib.Path(__file__).parents[2] / 'deploy/perch-deploy.py')
 receiver = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(receiver)
+with tempfile.TemporaryDirectory() as config_dir:
+    config = pathlib.Path(config_dir) / 'deploy.json'
+    config.write_text('{}')
+    with patch.dict(os.environ, {'PERCH_DEPLOY_CONFIG': str(config)}):
+        spec.loader.exec_module(receiver)
 
 class ReceiverTests(unittest.TestCase):
     def test_restricted_receiver_rejects_shell_commands(self):
