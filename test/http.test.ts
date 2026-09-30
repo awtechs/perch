@@ -22,8 +22,12 @@ test('MCP transport, owner login, CSRF, one-time approval and saved approval',as
     const command='printf integration-ok';const requested=parse(await client.callTool({name:'request_command',arguments:{command,cwd:'/tmp'}}));
     assert.equal(requested.status,'pending');
     assert.equal(parse(await client.callTool({name:'execute_approved_command',arguments:{request_id:requested.id}})).status,'pending');
-    const signIn=await fetch(`${url}/login`);const signInCookie=signIn.headers.get('set-cookie')!.split(';')[0];const signInHtml=await signIn.text();const signInCsrf=signInHtml.match(/name="csrf" value="([a-f0-9]+)"/)![1];
-    const login=await fetch(`${url}/login`,{method:'POST',headers:{Cookie:signInCookie,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({password,csrf:signInCsrf}),redirect:'manual'});
+    const signIn=await fetch(`${url}/login`);assert.equal(signIn.headers.get('referrer-policy'),'same-origin');const signInCookie=signIn.headers.get('set-cookie')!.split(';')[0];const signInHtml=await signIn.text();const signInCsrf=signInHtml.match(/name="csrf" value="([a-f0-9]+)"/)![1];
+    for (const origin of ['null','https://untrusted.example']) {
+      const rejected=await fetch(`${url}/login`,{method:'POST',headers:{Origin:origin,Cookie:signInCookie,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({password,csrf:signInCsrf}),redirect:'manual'});
+      assert.equal(rejected.status,403);assert.equal(await rejected.text(),'Unexpected origin');
+    }
+    const login=await fetch(`${url}/login`,{method:'POST',headers:{Origin:url,Cookie:signInCookie,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({password,csrf:signInCsrf}),redirect:'manual'});
     assert.equal(login.status,303);const cookie=login.headers.get('set-cookie')!.split(';')[0];
     const html=await(await fetch(`${url}/approvals`,{headers:{Cookie:cookie}})).text();const csrf=html.match(/name="csrf" value="([a-f0-9]+)"/)![1];
     const approve=async(id:string,decision:string,csrfValue=csrf):Promise<Response>=>fetch(`${url}/approvals/${id}`,{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({csrf:csrfValue,decision}),redirect:'manual'});
