@@ -19,6 +19,7 @@ ROOT = pathlib.Path(CONFIG.get('root', '/opt/perch'))
 DATA_DIR = pathlib.Path(CONFIG.get('data_dir', '/var/lib/perch'))
 SERVICE = CONFIG.get('service', 'perch')
 HEALTH_URL = CONFIG.get('health_url', 'http://127.0.0.1:8787/health')
+HEALTH_HOST = CONFIG.get('health_host', '')
 
 def run(*args: str) -> None:
     subprocess.run(args, check=True, stdin=subprocess.DEVNULL)
@@ -31,7 +32,8 @@ def activate(target: pathlib.Path) -> None:
 
 def healthy(version: str, commit: str | None = None) -> bool:
     try:
-        with urllib.request.urlopen(HEALTH_URL, timeout=2) as response:
+        request = urllib.request.Request(HEALTH_URL, headers={'Host': HEALTH_HOST} if HEALTH_HOST else {})
+        with urllib.request.urlopen(request, timeout=2) as response:
             body = json.load(response)
         return body.get('status') == 'ok' and body.get('version') == version and (commit is None or body.get('commit') == commit)
     except (OSError, ValueError):
