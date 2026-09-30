@@ -120,7 +120,7 @@ def update() -> None:
                     '--property=NoNewPrivileges=yes', '--property=ProtectSystem=strict', '--property=ProtectHome=yes', '--property=PrivateTmp=yes', '--property=ProtectProc=invisible',
                     '--property=ReadWritePaths='+str(scratch_path),
                     '--property=InaccessiblePaths=-/root -/etc/perch.env -/etc/awtechs-vps-mcp.env -/etc/perch-updater.env -/etc/perch-deploy -/opt/perch -/opt/awtechs-vps-mcp -/var/lib/awtechs-vps-mcp -/var/lib/perch -/run/docker.sock',
-                    '--setenv=HOME=/var/lib/perch-build', '--setenv=CI=true', '--setenv=PATH=/usr/local/bin:/usr/bin:/bin', '--setenv=RELEASE_VERSION='+tag[1:], '--setenv=RELEASE_COMMIT='+commit,
+                    '--setenv=HOME='+str(scratch_path), '--setenv=CI=true', '--setenv=PATH=/usr/local/bin:/usr/bin:/bin', '--setenv=RELEASE_VERSION='+tag[1:], '--setenv=RELEASE_COMMIT='+commit,
                     '/bin/bash', '/usr/local/libexec/perch-build']
                 subprocess.run(command, check=True, timeout=600, env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin'})
                 package = project / 'perch.tar.gz'
