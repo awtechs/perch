@@ -1,0 +1,17 @@
+[Unit]
+Description=Perch approval-gated VPS MCP
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/perch/current
+EnvironmentFile=/etc/perch.env
+ExecStart=/usr/bin/node /opt/perch/current/dist/server.js
+Restart=on-failure
+RestartSec=3
+KillMode=control-group
+TimeoutStopSec=10
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
