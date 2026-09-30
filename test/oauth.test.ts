@@ -1,0 +1,55 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { randomBytes, createHash } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { z } from 'zod';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+
+const tokenSchema=z.object({access_token:z.string(),refresh_token:z.string()});
+test('OAuth discovery, owner consent, PKCE, code replay, refresh rotation and audience binding',async()=>{
+  const data=mkdtempSync(`${tmpdir()}/perch-oauth-test-`);const password=randomBytes(32).toString('hex');const url='http://127.0.0.1:18788';
+  const child=spawn(process.execPath,['dist/server.js'],{env:{...process.env,DATA_DIR:data,PORT:'18788',PUBLIC_URL:url,ADMIN_PASSWORD:password},stdio:['ignore','pipe','pipe']});
+  const post=(path:string,body:URLSearchParams,cookie?:string):Promise<Response>=>fetch(url+path,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',...(cookie?{Cookie:cookie}:{})},body,redirect:'manual'});
+  const csrf=(html:string):string=>html.match(/name="csrf" value="([a-f0-9]+)"/)![1];
+  try {
+    await new Promise<void>((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('Server did not start')),10000);child.stdout.on('data',()=>{clearTimeout(timer);resolve();});child.on('error',reject);child.on('exit',code=>reject(new Error(`Server exited ${code}`)));});
+    const rejected=await fetch(url+'/mcp',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    assert.equal(rejected.status,401);assert.match(rejected.headers.get('www-authenticate')!,/oauth-protected-resource\/mcp/);
+    const metadata=z.object({resource:z.string(),authorization_servers:z.array(z.string())}).parse(await(await fetch(url+'/.well-known/oauth-protected-resource/mcp')).json());
+    assert.equal(metadata.resource,url+'/mcp');assert.equal(metadata.authorization_servers[0],url+'/');
+    const register=async(redirect:string):Promise<Response>=>fetch(url+'/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_name:'OAuth test client',redirect_uris:[redirect],token_endpoint_auth_method:'none',grant_types:['authorization_code','refresh_token'],response_types:['code']})});
+    assert.equal((await register('http://evil.example/callback')).status,400);
+    const registered=await register('https://client.example/callback');assert.equal(registered.status,201);
+    const client=z.object({client_id:z.string()}).parse(await registered.json());
+    const verifier=randomBytes(32).toString('base64url');const challenge=createHash('sha256').update(verifier).digest('base64url');
+    const authorize=new URLSearchParams({client_id:client.client_id,response_type:'code',redirect_uri:'https://client.example/callback',code_challenge:challenge,code_challenge_method:'S256',resource:url+'/mcp',state:'original-state',scope:'vps:commands'});
+    const redirect=await fetch(url+'/authorize?'+authorize,{redirect:'manual'});assert.equal(redirect.status,303);
+    const consentPath=redirect.headers.get('location')!;assert.match(consentPath,/\/oauth\/consent\?request=/);
+    const loginRedirect=await fetch(url+consentPath,{redirect:'manual'});assert.equal(loginRedirect.status,303);assert.match(loginRedirect.headers.get('location')!,/next=/);
+    const signIn=await fetch(url+loginRedirect.headers.get('location')!);const anonymousCookie=signIn.headers.get('set-cookie')!.split(';')[0];
+    const form=await signIn.text();const next=form.match(/name="next" value="([^"]+)"/)![1];
+    assert.equal((await post('/login',new URLSearchParams({password,csrf:'invalid'}),anonymousCookie)).status,403);
+    const login=await post('/login',new URLSearchParams({password,csrf:csrf(form),next}),anonymousCookie);assert.equal(login.status,303);
+    const ownerCookie=login.headers.get('set-cookie')!.split(';')[0];assert.notEqual(ownerCookie,anonymousCookie);assert.equal(login.headers.get('location'),consentPath);
+    const consent=await(await fetch(url+consentPath,{headers:{Cookie:ownerCookie}})).text();const request=consentPath.split('request=')[1];
+    const granted=await post('/oauth/consent',new URLSearchParams({request,decision:'allow',csrf:csrf(consent)}),ownerCookie);assert.equal(granted.status,303);
+    const callback=new URL(granted.headers.get('location')!);assert.equal(callback.searchParams.get('state'),'original-state');assert.equal(callback.searchParams.get('iss'),url+'/');
+    const code=callback.searchParams.get('code')!;
+    const exchange=(codeVerifier:string,resource=url+'/mcp',redirectUri='https://client.example/callback'):Promise<Response>=>post('/token',new URLSearchParams({client_id:client.client_id,grant_type:'authorization_code',code,code_verifier:codeVerifier,redirect_uri:redirectUri,resource}));
+    assert.equal((await exchange(randomBytes(32).toString('base64url'))).status,400);
+    assert.equal((await exchange(verifier,'https://wrong.example/mcp')).status,400);
+    assert.equal((await exchange(verifier,url+'/mcp','https://client.example/other')).status,400);
+    const exchanged=await exchange(verifier);assert.equal(exchanged.status,200);const tokens=tokenSchema.parse(await exchanged.json());
+    assert.equal((await exchange(verifier)).status,400);
+    const mcp=new Client({name:'oauth-protocol-test',version:'1'});
+    await mcp.connect(new StreamableHTTPClientTransport(new URL(url+'/mcp'),{requestInit:{headers:{Authorization:'Bearer '+tokens.access_token}}}));
+    const tools=await mcp.listTools();assert.equal(tools.tools.length,3);assert.equal(tools.tools[0].annotations?.destructiveHint,true);await mcp.close();
+    const refresh=(value:string):Promise<Response>=>post('/token',new URLSearchParams({client_id:client.client_id,grant_type:'refresh_token',refresh_token:value,resource:url+'/mcp'}));
+    const rotated=await refresh(tokens.refresh_token);assert.equal(rotated.status,200);const newer=tokenSchema.parse(await rotated.json());assert.notEqual(newer.refresh_token,tokens.refresh_token);
+    assert.equal((await refresh(tokens.refresh_token)).status,400);
+    const revoked=await fetch(url+'/mcp',{method:'POST',headers:{Authorization:'Bearer '+newer.access_token,'Content-Type':'application/json'},body:'{}'});assert.equal(revoked.status,401);
+  } finally {child.kill();await new Promise<void>(resolve=>child.once('exit',()=>resolve()));rmSync(data,{recursive:true,force:true});}
+});

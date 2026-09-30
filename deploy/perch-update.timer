@@ -1,0 +1,9 @@
+[Unit]
+Description=Check for new Perch version tags
+[Timer]
+OnBootSec=60
+OnUnitInactiveSec=60
+RandomizedDelaySec=10
+Persistent=true
+[Install]
+WantedBy=timers.target

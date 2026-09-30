@@ -9,7 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
-    runs-on: [self-hosted, linux, x64, perch]
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
@@ -32,7 +32,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: npm version "${RELEASE_TAG#v}" --no-git-tag-version --allow-same-version
-      - run: npm run build && npm test
+      - run: npm run typecheck && npm run build && npm test && npm run test:deploy
       - name: Package release
         run: |
           npm prune --omit=dev --no-audit --no-fund
@@ -44,20 +44,3 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: gh release create "$RELEASE_TAG" perch.tar.gz perch.tar.gz.sha256 --verify-tag --generate-notes
-      - name: Deploy exact release
-        env:
-          DEPLOY_HOST: ${{ secrets.PERCH_DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.PERCH_DEPLOY_PORT }}
-          DEPLOY_KEY: ${{ secrets.PERCH_DEPLOY_KEY }}
-          KNOWN_HOSTS: ${{ secrets.PERCH_DEPLOY_KNOWN_HOSTS }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          test -n "$DEPLOY_HOST" && test -n "$DEPLOY_KEY" && test -n "$KNOWN_HOSTS"
-          mkdir -m 700 -p "$RUNNER_TEMP/perch-ssh"
-          printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/perch-ssh/key"
-          printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/perch-ssh/known_hosts"
-          chmod 600 "$RUNNER_TEMP/perch-ssh/key"
-          trap 'rm -rf "$RUNNER_TEMP/perch-ssh"' EXIT
-          digest=$(cut -d ' ' -f 1 perch.tar.gz.sha256)
-          commit=$(cat COMMIT)
-          ssh -i "$RUNNER_TEMP/perch-ssh/key" -p "${DEPLOY_PORT:-22}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/perch-ssh/known_hosts" -o BatchMode=yes -o ConnectTimeout=15 "root@$DEPLOY_HOST" "deploy $RELEASE_TAG $digest $commit" < perch.tar.gz

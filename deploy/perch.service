@@ -4,6 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
+User=perch
+Group=perch
 WorkingDirectory=/opt/perch/current
 EnvironmentFile=/etc/perch.env
 ExecStart=/usr/bin/node /opt/perch/current/dist/server.js
