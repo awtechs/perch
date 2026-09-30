@@ -36,7 +36,7 @@ Before retiring RDC: configure TLS and authenticated client onboarding, exercise
 
 Pull requests and pushes to `main` run checks without updating production. Push a semantic version tag such as `v0.1.0` on a commit already merged into `main` to publish and deploy that version. Do not move or reuse release tags.
 
-The release workflow builds and tests on Node.js 24, packages production dependencies, and publishes a GitHub release with the archive and its SHA-256 checksum. A dedicated SSH key streams that same archive to `deploy/perch-deploy.py` on the VPS. The forced-command key cannot open a general SSH shell, forward ports or allocate a terminal. Deployment requires repository secrets `PERCH_DEPLOY_HOST`, `PERCH_DEPLOY_PORT`, `PERCH_DEPLOY_KEY` and `PERCH_DEPLOY_KNOWN_HOSTS`.
+Checks and releases run on the dedicated non-root `perch` self-hosted runner, with filesystem protections around production credentials and approval data. The release workflow builds and tests on Node.js 24, packages production dependencies, and publishes a GitHub release with the archive and its SHA-256 checksum. A dedicated SSH key streams that same archive to `deploy/perch-deploy.py` on the VPS. The forced-command key cannot open a general SSH shell, forward ports or allocate a terminal. Deployment requires repository secrets `PERCH_DEPLOY_HOST`, `PERCH_DEPLOY_PORT`, `PERCH_DEPLOY_KEY` and `PERCH_DEPLOY_KNOWN_HOSTS`.
 
 The receiver validates tag, checksum, commit and archive paths; takes an SQLite backup with the service stopped; installs a separate release directory; atomically switches `/opt/perch/current`; and checks the running version. A failed health check restores the previous code and restarts it. Deployments are serialised on GitHub and with a VPS file lock.
 

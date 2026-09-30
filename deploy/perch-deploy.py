@@ -25,17 +25,17 @@ def activate(target: pathlib.Path) -> None:
     link.symlink_to(target)
     link.replace(ROOT / 'current')
 
-def healthy(version: str) -> bool:
+def healthy(version: str, commit: str | None = None) -> bool:
     try:
         with urllib.request.urlopen('http://127.0.0.1:8787/health', timeout=2) as response:
             body = json.load(response)
-        return body.get('status') == 'ok' and body.get('version') == version
+        return body.get('status') == 'ok' and body.get('version') == version and (commit is None or body.get('commit') == commit)
     except (OSError, ValueError):
         return False
 
-def wait_health(version: str) -> bool:
+def wait_health(version: str, commit: str | None = None) -> bool:
     for _ in range(20):
-        if healthy(version):
+        if healthy(version, commit):
             return True
         time.sleep(1)
     return False
@@ -99,7 +99,7 @@ def main() -> None:
                 staged.replace(release)
                 activate(release)
                 run('systemctl', 'start', 'perch')
-                if not wait_health(tag[1:]):
+                if not wait_health(tag[1:], commit):
                     raise RuntimeError('New release failed its health check')
             except BaseException:
                 run('systemctl', 'stop', 'perch')

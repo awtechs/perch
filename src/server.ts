@@ -1,6 +1,6 @@
 import express, { type Request, type Response } from 'express';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
@@ -9,6 +9,8 @@ import { directory, execute } from './runner.js';
 
 const env=z.object({ADMIN_PASSWORD:z.string().min(24),CLIENT_TOKEN:z.string().min(32),CLIENT_ID:z.string().default('bootstrap'),CLIENT_NAME:z.string().default('Bootstrap test client'),DATA_DIR:z.string().default('./data'),HOST:z.string().default('127.0.0.1'),PORT:z.coerce.number().default(8787),PUBLIC_URL:z.string().url().default('http://127.0.0.1:8787')}).parse(process.env);
 const version=z.object({version:z.string()}).parse(JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'))).version;
+const commitFile=new URL('../COMMIT',import.meta.url);
+const commit=existsSync(commitFile)?readFileSync(commitFile,'utf8').trim():'development';
 mkdirSync(env.DATA_DIR,{recursive:true,mode:0o700});
 const store=new Store(`${env.DATA_DIR}/state.sqlite`);
 store.registerClient(env.CLIENT_ID,env.CLIENT_NAME,env.CLIENT_TOKEN);
@@ -33,7 +35,7 @@ function owner(req:Request,res:Response,next:()=>void):void {
     if(!token.success||token.data.csrf!==found.csrf){res.status(403).send('Invalid approval session');return;}
   }next();
 }
-app.get('/health',(_req,res)=>res.json({status:'ok',version}));
+app.get('/health',(_req,res)=>res.json({status:'ok',version,commit}));
 app.get('/login',(_req,res)=>res.send(page('<h1>VPS approvals</h1><form method="post" action="/login"><label>Owner password <input name="password" type="password" required autocomplete="current-password"></label><button>Sign in</button></form>')));
 app.post('/login',(req,res)=>{
   const key=req.socket.remoteAddress??'local';const entry=failures.get(key);
