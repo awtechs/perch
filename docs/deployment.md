@@ -17,7 +17,7 @@ Create a separate `perch-build` system user with home `/var/lib/perch-build`, no
 The root-owned, mode-0600 `/etc/perch-updater.env` contains:
 
 ```dotenv
-PERCH_REPOSITORY=Lordeagle4/perch
+PERCH_REPOSITORY=awtechs/perch
 # Optional for a public repository; required for a private one.
 GITHUB_TOKEN=replace-with-a-read-only-repository-token
 ```
