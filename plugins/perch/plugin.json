@@ -1,0 +1,34 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "perch",
+  "version": "0.2.0",
+  "description": "Connect your own self-hosted Perch MCP server and manage your VPS through its owner-controlled command approval workflow.",
+  "author": {
+    "name": "AWTechs"
+  },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Perch",
+        "shortDescription": "Your VPS. Your approval.",
+        "longDescription": "Free guidance and workflows for self-hosted Perch VPS administration. Connect your own Perch server separately through your client's custom MCP setup, then use the skill to request commands, wait for owner approval and retrieve results. This package provides instructions; it does not bundle an MCP server, automatically create a connection or grant access to an AWTechs VPS. Commands and results travel directly between your client and your server.",
+        "developerName": "AWTechs",
+        "category": "Developer Tools",
+        "defaultPrompt": [
+          "Help me connect my own Perch server.",
+          "Use my connected Perch server to check its uptime."
+        ],
+        "websiteURL": "https://perch.awtechs.com/",
+        "supportURL": "https://perch.awtechs.com/support/",
+        "privacyPolicyURL": "https://perch.awtechs.com/privacy/",
+        "termsOfServiceURL": "https://perch.awtechs.com/terms/",
+        "logo": "./assets/perch-logo.png",
+        "composerIcon": "./assets/perch-logo.png"
+      },
+      "publication": {
+        "countries": [],
+        "release_notes": "Initial public skills package for direct, user-owned Perch connections. Includes setup guidance and the command approval workflow; no shared gateway or bundled server endpoint."
+      }
+    }
+  }
+}
