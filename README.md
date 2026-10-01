@@ -1,6 +1,8 @@
-# Perch
+<p align="center">
+  <img src="assets/perch-logo.svg" alt="Perch" width="360">
+</p>
 
-Self-hosted VPS administration through MCP, with explicit owner approval for shell commands.
+<p align="center">Self-hosted VPS administration through MCP, with explicit owner approval for shell commands.</p>
 
 Perch lets an AI client request an arbitrary Bash command, shows the owner exactly what will run, and records the decision and result. It is designed for Linux servers. Desktop control is outside the current scope.
 
