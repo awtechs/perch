@@ -1,6 +1,8 @@
 <p align="center">
-  <img src="assets/perch-logo.svg" alt="Perch" width="360">
+  <img src="assets/perch-mascot.svg" alt="Perch mascot" width="128">
 </p>
+
+<h1 align="center">Perch</h1>
 
 <p align="center">Self-hosted VPS administration through MCP, with explicit owner approval for shell commands.</p>
 
