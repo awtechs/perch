@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 230 220" role="img" aria-labelledby="title desc">
+  <title id="title">Perch mascot</title>
+  <desc id="desc">A bird combined with a terminal prompt.</desc>
+  <g transform="translate(4 8)">
+    <path fill="#17212A" d="M157 23c-20-19-54-20-76-2L29 67h54c29 0 48 14 48 42v4c0 34-22 61-55 61H31l-19 18h119c11 0 20-9 20-20v-31c0-9 7-14 14-20 15-13 23-31 23-53V60c0-14 6-25 17-32l17-10-34-9c-10-3-21-8-31-16Z"/>
+    <path fill="#17212A" d="M31 80h52c20 0 32 9 32 29v4c0 21-12 34-35 34H8l23-67Z"/>
+    <path fill="#FFFFFF" d="M78 80h8c25 0 45 18 45 43v2c0 28-19 48-48 48H58l16-14h9c21 0 33-13 33-35v-2c0-18-12-30-30-30H78V80Z" opacity=".96"/>
+    <circle cx="159" cy="48" r="9" fill="#FFFFFF"/>
+    <path fill="#31B7F2" d="m48 96 13-13 29 29-29 29-13-13 16-16-16-16Z"/>
+    <rect x="86" y="128" width="33" height="13" rx="2" fill="#31B7F2"/>
+    <rect x="14" y="174" width="160" height="18" rx="9" fill="#17212A"/>
+    <path fill="#17212A" d="m67 145 34 29H49l18-29Z"/>
+  </g>
+</svg>
